@@ -1,0 +1,221 @@
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: #0d0b14;
+  color: #f4f1ff;
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+.top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24px;
+  padding: 28px 32px 8px;
+}
+
+.top h1 {
+  margin: 0;
+  font-size: 44px;
+  line-height: 1;
+  letter-spacing: 2px;
+  color: #fff;
+  text-shadow: 3px 3px 0 #ff2e88, 6px 6px 0 #22d3ee;
+}
+
+.top p {
+  margin: 10px 0 0;
+  max-width: 640px;
+  color: #b9b3d0;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.badge {
+  flex: none;
+  padding: 8px 14px;
+  border: 2px solid #ffb347;
+  color: #ffb347;
+  font-weight: 800;
+  letter-spacing: 3px;
+  font-size: 13px;
+  border-radius: 4px;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 28px;
+  padding: 20px 32px;
+}
+
+.stage .canvas-wrap {
+  background: #171226;
+  border: 1px solid #2c2447;
+  border-radius: 10px;
+  padding: 16px;
+  display: flex;
+  justify-content: center;
+}
+
+#cover {
+  width: min(100%, 640px);
+  height: auto;
+  display: block;
+  border-radius: 4px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+}
+
+.export-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 14px;
+}
+
+.export-bar span {
+  color: #b9b3d0;
+  font-size: 14px;
+}
+
+#exportBtn {
+  padding: 12px 26px;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: #14060d;
+  background: linear-gradient(90deg, #ff2e88, #ffb347);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+#exportBtn:hover { filter: brightness(1.12); }
+
+.hint {
+  color: #8f88a8;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.controls section {
+  background: #171226;
+  border: 1px solid #2c2447;
+  border-radius: 10px;
+  padding: 16px 18px;
+  margin-bottom: 14px;
+}
+
+.controls h2 {
+  margin: 0 0 12px;
+  font-size: 15px;
+  letter-spacing: 1px;
+  color: #ffb347;
+}
+
+.controls label {
+  display: block;
+  font-size: 13px;
+  color: #b9b3d0;
+  margin-bottom: 10px;
+}
+
+.controls input[type="text"] {
+  display: block;
+  width: 100%;
+  margin-top: 5px;
+  padding: 9px 10px;
+  font-size: 15px;
+  color: #fff;
+  background: #0d0b14;
+  border: 1px solid #3a3160;
+  border-radius: 6px;
+}
+
+.file-btn {
+  display: inline-block;
+  padding: 10px 16px;
+  background: #22d3ee;
+  color: #06222a;
+  font-weight: 700;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.samples {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.samples button {
+  flex: 1;
+  padding: 9px 6px;
+  font-size: 12px;
+  color: #f4f1ff;
+  background: #241d3d;
+  border: 1px solid #3a3160;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.samples button:hover { border-color: #ff2e88; }
+
+.note {
+  color: #8f88a8;
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 10px 0 0;
+}
+
+.seg { display: flex; gap: 8px; }
+
+.seg button {
+  flex: 1;
+  padding: 9px 4px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #cfc9e6;
+  background: #241d3d;
+  border: 1px solid #3a3160;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.seg button.on {
+  background: #ff2e88;
+  border-color: #ff2e88;
+  color: #fff;
+}
+
+footer {
+  padding: 8px 32px 28px;
+  color: #6f688c;
+  font-size: 12px;
+}
+
+/* Staging mode: a bare cover on a dark page, for screenshots. */
+body.shot-cover { background: #000; }
+body.shot-cover .top,
+body.shot-cover .controls,
+body.shot-cover footer,
+body.shot-cover .export-bar,
+body.shot-cover .hint { display: none; }
+body.shot-cover .layout { display: block; padding: 0; }
+body.shot-cover .stage .canvas-wrap {
+  border: none;
+  background: #000;
+  padding: 0;
+  border-radius: 0;
+}
+body.shot-cover #cover {
+  /* Letterbox on the canvas's own aspect: the staging script sets an exact
+  inline size, this keeps a bare cover centred if it does not run. */
+  width: auto;
+  height: auto;
+  max-width: 100vw;
+  max-height: 100vh;
+  box-shadow: none;
+  border-radius: 0;
+}

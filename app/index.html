@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vice City Nights — GTA-style Cover Art Maker</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <div>
+    <h1>VICE CITY NIGHTS</h1>
+    <p>Turn a photo and a caption into GTA-style cover art. Pick a photo, type
+    a title, choose a layout and a grade, export a PNG to share.</p>
+  </div>
+  <div class="badge">SOLARA CITY</div>
+</header>
+
+<main class="layout">
+  <section class="stage">
+    <div class="canvas-wrap">
+      <canvas id="cover" width="1080" height="1080"></canvas>
+    </div>
+    <div class="export-bar">
+      <span id="sizeLabel">1080 &times; 1080</span>
+      <button id="exportBtn" type="button">Export PNG</button>
+      <a id="downloadLink" hidden></a>
+    </div>
+    <p class="hint">The cover above is drawn live from your photo. Export writes
+    the same drawing as a PNG at the size you picked.</p>
+  </section>
+
+  <aside class="controls">
+    <section>
+      <h2>1 · Photo</h2>
+      <label class="file-btn">Upload a photo
+        <input id="photoFile" type="file" accept="image/*" hidden>
+      </label>
+      <div class="samples">
+        <button type="button" data-sample="samples/portrait1.jpg">Sample 1 · Driver</button>
+        <button type="button" data-sample="samples/portrait2.jpg">Sample 2 · Neon Queen</button>
+      </div>
+      <p class="note">Use your own photo or a sample. Nothing is uploaded
+      anywhere — the photo never leaves this page.</p>
+    </section>
+
+    <section>
+      <h2>2 · Caption</h2>
+      <label>Title
+        <input id="titleInput" type="text" value="SOLARA" maxlength="24" autocomplete="off" spellcheck="false">
+      </label>
+      <label>Tagline
+        <input id="taglineInput" type="text" value="A Solara City Story" maxlength="48" autocomplete="off" spellcheck="false">
+      </label>
+    </section>
+
+    <section>
+      <h2>3 · Layout</h2>
+      <div class="seg" id="layoutSeg">
+        <button type="button" data-layout="hero" class="on">Hero</button>
+        <button type="button" data-layout="panels">Panels</button>
+        <button type="button" data-layout="trio">Trio</button>
+      </div>
+      <p class="note">Hero is one full-bleed photo. Panels splits it into a
+      hero and two side panels. Trio is three stacked scenes.</p>
+    </section>
+
+    <section>
+      <h2>4 · Grade</h2>
+      <div class="seg" id="gradeSeg">
+        <button type="button" data-grade="sunset" class="on">Sunset</button>
+        <button type="button" data-grade="neon">Neon</button>
+        <button type="button" data-grade="vice">Vice</button>
+      </div>
+      <p class="note">Sunset is a warm Vice City evening. Neon is cyan and
+      magenta after dark. Vice is purple dusk.</p>
+    </section>
+
+    <section>
+      <h2>5 · Size</h2>
+      <div class="seg" id="sizeSeg">
+        <button type="button" data-size="1080x1080" class="on">1080 &times; 1080</button>
+        <button type="button" data-size="1080x1350">1080 &times; 1350</button>
+        <button type="button" data-size="1920x1080">1920 &times; 1080</button>
+      </div>
+    </section>
+  </aside>
+</main>
+
+<footer>
+  <p>All art on this page is original and invented. No Rockstar Games logo,
+  artwork or font is used. Built for the make.fun gta6-cover-art-01 bounty.</p>
+</footer>
+
+<noscript><p style="padding: 20px 32px; color: #ffb347;">Vice City Nights draws its covers with JavaScript — enable it to make a cover.</p></noscript>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>
