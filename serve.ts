@@ -1,75 +1,55 @@
-// A tiny static server for app/ (Node 22, standard library only), so the
-// cover maker can be tried locally without a build step: `node serve.ts`
-// serves app/ on http://localhost:8080. It only answers paths inside app/,
-// sends the MIME types an offline web app needs, and does nothing clever:
-// a development convenience, not a web server for the internet.
-import { createReadStream, statSync } from 'node:fs';
+// Vice City Nights — dev server.
+//
+// Serves app/ as plain static files on http://localhost:8080, so the
+// editor can be tried in a desktop browser with no build step and no
+// network request. Run from the repository root:
+//
+//   node serve.ts
+import { createReadStream, existsSync, statSync } from 'node:fs';
 import { createServer } from 'node:http';
-import { extname, join, normalize, resolve, sep } from 'node:path';
+import { dirname, extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const appRoot = resolve(fileURLToPath(new URL('./app', import.meta.url)));
-const rawArgs = process.argv.slice(2);
-const portFlag = rawArgs.indexOf('--port');
-const wanted = portFlag === -1 ? 8080 : Number(rawArgs[portFlag + 1]);
-const port = Number.isInteger(wanted) && wanted > 0 && wanted < 65536 ? wanted : 8080;
+// Every path resolves from this file's own directory — never a relative
+// path, so the server works from any working directory.
+const repoRoot = dirname(fileURLToPath(import.meta.url));
+const appDir = join(repoRoot, 'app');
+const PORT = 8080;
 
-const TYPES: Record<string, string> = {
-  '.html': 'text/html; charset=utf-8',
-  '.js': 'text/javascript; charset=utf-8',
-  '.mjs': 'text/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.json': 'application/json; charset=utf-8',
-  '.png': 'image/png',
+const MIME = {
+  '.css': 'text/css',
+  '.html': 'text/html',
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
-  '.gif': 'image/gif',
-  '.webp': 'image/webp',
+  '.js': 'text/javascript',
+  '.json': 'application/json',
+  '.mjs': 'text/javascript',
+  '.png': 'image/png',
   '.svg': 'image/svg+xml',
-  '.ico': 'image/x-icon',
-  '.woff2': 'font/woff2',
-  '.woff': 'font/woff',
-  '.ttf': 'font/ttf',
-  '.otf': 'font/otf',
-  '.wasm': 'application/wasm',
-  '.txt': 'text/plain; charset=utf-8',
 };
 
-createServer((req, res) => {
-  const target = new URL(req.url ?? '/', 'http://localhost');
-  let pathname: string;
+const server = createServer((req, res) => {
+  // Strip the query first, then map the bare root to index.html — a URL
+  // like /?shot=editor is the editor page, not a missing file.
+  const rawPath = (req.url || '/').split('?')[0];
+  const target = rawPath === '/' ? '/index.html' : rawPath;
+  let path;
   try {
-    pathname = decodeURIComponent(target.pathname);
-  } catch {
-    res.writeHead(400).end('bad request');
+    path = decodeURIComponent(target);
+  } catch (e) {
+    path = target;
+  }
+  const file = join(appDir, path);
+  if (!file.startsWith(appDir) || !existsSync(file) || !statSync(file).isFile()) {
+    res.writeHead(404, { 'content-type': 'text/plain' });
+    res.end('not found');
     return;
   }
-  if (pathname.endsWith('/')) pathname += 'index.html';
-  const file = resolve(join(appRoot, normalize(pathname)));
-  if (file !== appRoot && !file.startsWith(appRoot + sep)) {
-    res.writeHead(403).end('forbidden');
-    return;
-  }
-  let bytes: number;
-  try {
-    const info = statSync(file);
-    if (!info.isFile()) throw new Error('not a file');
-    bytes = info.size;
-  } catch {
-    res.writeHead(404).end('not found');
-    return;
-  }
-  res.writeHead(200, {
-    'content-type': TYPES[extname(file).toLowerCase()] ?? 'application/octet-stream',
-    'content-length': bytes,
-    'cache-control': 'no-store',
-  });
-  // A HEAD request gets the headers and no body.
-  if (req.method === 'HEAD') {
-    res.end();
-    return;
-  }
+  // Screenshots and previews must never be stale while iterating.
+  res.writeHead(200, { 'cache-control': 'no-store', 'content-type': MIME[extname(file)] || 'application/octet-stream' });
   createReadStream(file).pipe(res);
-}).listen(port, '127.0.0.1', () => {
-  console.log(`Vice City Nights app/ is on http://localhost:${port}`);
+});
+
+server.listen(PORT, () => {
+  console.log(`Vice City Nights at http://localhost:${PORT}`);
 });

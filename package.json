@@ -1,0 +1,1 @@
+{"description":"SOLARA cover maker — turn any photo and a caption into GTA-style cover art, offline in the browser.","engines":{"node":">=22"},"license":"MIT","name":"vice-city-nights","private":true,"scripts":{"build":"mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts","start":"node serve.ts"},"type":"module","version":"1.0.0"}

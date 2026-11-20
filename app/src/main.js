@@ -1,186 +1,267 @@
-// Vice City Nights — the editor wiring. State lives in one object; every
-// control writes it and calls render(), which draws the cover fresh onto the
-// preview canvas at the export size (CSS scales it down). Export draws the
-// same cover onto a fresh canvas and downloads it as a PNG. Nothing here
-// talks to a network: photos are local files or samples, the drawing is all
-// canvas, the export is a blob URL.
+// Vice City Nights — the editor.
+//
+// Wires the page to the cover renderer: photo uploads per panel, drag to
+// position and scroll to zoom, layout and grade pickers, caption editing,
+// and one-step PNG export. The two fictional sample portraits load by
+// default, so the editor shows a finished-looking cover on first open.
+import { GRADES } from './grade.js';
+import { LAYOUTS, SIZES, drawCover, layoutPanels, renderCover } from './cover.js';
+import { setupShotScene } from './shots.js';
 
-import { drawCover, SIZES } from './cover.js';
-import { applyStaging } from './shots.js';
+const SAMPLES = ['samples/portrait1.jpg', 'samples/portrait2.jpg'];
 
-const state = {
-  photo: null,
-  title: 'SOLARA',
-  tagline: 'A Solara City Story',
-  layout: 'hero',
+export const state = {
+  layout: 'grid',
   grade: 'sunset',
-  size: '1080x1080',
+  title: 'SOLARA',
+  subtitle: 'Vice City Nights',
+  badge: 'SOLARA CITY',
+  stars: 4,
+  size: 'wide',
+  panels: [
+    { img: null, zoom: 1.15, ox: 0, oy: 0 },
+    { img: null, zoom: 1.1, ox: 0, oy: 0 },
+    { img: null, zoom: 1.4, ox: 0, oy: 0 },
+    { img: null, zoom: 1.35, ox: 0, oy: 0 },
+  ],
 };
 
-const canvas = document.getElementById('cover');
-const sizeLabel = document.getElementById('sizeLabel');
-const exportBtn = document.getElementById('exportBtn');
-const downloadLink = document.getElementById('downloadLink');
+const preview = document.getElementById('preview');
+const previewCtx = preview.getContext('2d');
+const statusLine = document.getElementById('status');
 
-function loadImage(src) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error(`could not load ${src}`));
-    img.src = src;
-  });
-}
-
-function currentDims() {
-  return SIZES[state.size] ?? [1080, 1080];
-}
-
-// Draw the placeholder when no photo is loaded yet: a dusk gradient, the
-// sun mark's colours, and a prompt to load a photo.
-function drawEmpty() {
-  const [w, h] = currentDims();
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext('2d');
-  const sky = ctx.createLinearGradient(0, 0, 0, h);
-  sky.addColorStop(0, '#1b0f2e');
-  sky.addColorStop(0.55, '#ff2e88');
-  sky.addColorStop(1, '#ffb347');
-  ctx.fillStyle = sky;
-  ctx.fillRect(0, 0, w, h);
-  ctx.fillStyle = 'rgba(255,255,255,0.92)';
-  ctx.font = `900 ${Math.round(w * 0.045)}px "Arial Black", Impact, sans-serif`;
-  ctx.textAlign = 'center';
-  ctx.fillText('LOAD A PHOTO', w / 2, h / 2 - 10);
-  ctx.font = `700 ${Math.round(w * 0.02)}px "Arial Black", Impact, sans-serif`;
-  ctx.fillStyle = '#ffe08a';
-  ctx.fillText('TO MAKE YOUR COVER', w / 2, h / 2 + Math.round(w * 0.045));
-}
-
-function render() {
-  const [w, h] = currentDims();
-  sizeLabel.textContent = `${w} × ${h}`;
-  if (!state.photo) {
-    drawEmpty();
+// Fit the preview canvas to the chosen export size, capped for speed —
+// except in a screenshot scene, where the canvas renders at the full
+// export size so the capture is the cover itself.
+function fitPreview() {
+  const size = SIZES[state.size];
+  if (document.body.classList.contains('shot-cover')) {
+    preview.width = size.width;
+    preview.height = size.height;
     return;
   }
-  drawCover(canvas, {
-    photo: state.photo,
-    title: state.title,
-    tagline: state.tagline,
-    layout: state.layout,
-    grade: state.grade,
-    width: w,
-    height: h,
+  const scale = Math.min(1, 760 / Math.max(size.width, size.height));
+  preview.width = Math.round(size.width * scale);
+  preview.height = Math.round(size.height * scale);
+}
+
+export function redraw() {
+  fitPreview();
+  drawCover(previewCtx, state, preview.width, preview.height);
+  const size = SIZES[state.size];
+  statusLine.textContent = `${LAYOUTS[state.layout]} · ${GRADES[state.grade].label} grade · export ${size.width} × ${size.height} PNG`;
+}
+
+// Frame a photo in its panel so the subject's face lands in view: the
+// visible window's top sits 12% down the photo, where faces live in a
+// portrait shot, clamped so the photo always covers the whole panel.
+// Without this, a tall portrait in a wide panel crops to the chest and
+// the face is cut off at the panel's top edge.
+export function framePanelForPhoto(index) {
+  const panel = state.panels[index];
+  const img = panel.img;
+  if (!img || !img.naturalWidth) return;
+  fitPreview();
+  const rects = layoutPanels(state.layout, preview.width, preview.height);
+  const rect = rects[index];
+  if (!rect) return;
+  const iw = img.naturalWidth;
+  const ih = img.naturalHeight;
+  const zoom = panel.zoom || 1.15;
+  const scale = Math.max(rect.w / iw, rect.h / ih) * zoom;
+  const dh = ih * scale;
+  const baseDy = (rect.h - dh) / 2;
+  const dyTarget = -0.12 * dh;
+  const oyMin = (rect.h - dh) / (2 * rect.h);
+  const oyMax = (dh - rect.h) / (2 * rect.h);
+  panel.oy = Math.max(oyMin, Math.min(oyMax, (dyTarget - baseDy) / rect.h));
+  panel.ox = 0;
+}
+
+// Load an image file (or a sample path) into one panel. The panel keeps
+// its zoom but is reframed for the new photo, so a fresh photo starts
+// with its subject in view instead of cropped to the chest.
+export function loadPhotoIntoPanel(index, source) {
+  const img = new Image();
+  img.onload = () => {
+    state.panels[index].img = img;
+    framePanelForPhoto(index);
+    redraw();
+  };
+  img.src = source;
+}
+
+function loadSamples() {
+  loadPhotoIntoPanel(0, SAMPLES[0]);
+  loadPhotoIntoPanel(1, SAMPLES[1]);
+  loadPhotoIntoPanel(2, SAMPLES[0]);
+  loadPhotoIntoPanel(3, SAMPLES[1]);
+}
+
+// Which panel sits under a point on the preview canvas, in preview pixels.
+function panelAt(px, py) {
+  const rects = layoutPanels(state.layout, preview.width, preview.height);
+  for (let i = rects.length - 1; i >= 0; i--) {
+    const r = rects[i];
+    if (px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h) return i;
+  }
+  return -1;
+}
+
+function bindCanvasGestures() {
+  let dragging = -1;
+  let lastX = 0;
+  let lastY = 0;
+  preview.addEventListener('pointerdown', (event) => {
+    const box = preview.getBoundingClientRect();
+    const px = (event.clientX - box.left) * (preview.width / box.width);
+    const py = (event.clientY - box.top) * (preview.height / box.height);
+    const hit = panelAt(px, py);
+    if (hit < 0) return;
+    dragging = hit;
+    lastX = px;
+    lastY = py;
+    preview.setPointerCapture(event.pointerId);
+  });
+  preview.addEventListener('pointermove', (event) => {
+    if (dragging < 0) return;
+    const box = preview.getBoundingClientRect();
+    const px = (event.clientX - box.left) * (preview.width / box.width);
+    const py = (event.clientY - box.top) * (preview.height / box.height);
+    const rects = layoutPanels(state.layout, preview.width, preview.height);
+    const rect = rects[dragging];
+    const panel = state.panels[dragging];
+    panel.ox += (px - lastX) / rect.w;
+    panel.oy += (py - lastY) / rect.h;
+    panel.ox = Math.max(-0.5, Math.min(0.5, panel.ox));
+    panel.oy = Math.max(-0.5, Math.min(0.5, panel.oy));
+    lastX = px;
+    lastY = py;
+    redraw();
+  });
+  preview.addEventListener('pointerup', () => { dragging = -1; });
+  preview.addEventListener('wheel', (event) => {
+    event.preventDefault();
+    const box = preview.getBoundingClientRect();
+    const px = (event.clientX - box.left) * (preview.width / box.width);
+    const py = (event.clientY - box.top) * (preview.height / box.height);
+    const hit = panelAt(px, py);
+    if (hit < 0) return;
+    const panel = state.panels[hit];
+    panel.zoom = Math.max(1, Math.min(4, panel.zoom * (event.deltaY < 0 ? 1.1 : 0.9)));
+    redraw();
+  }, { passive: false });
+}
+
+// Build one row of panel controls: upload, samples, zoom, reset.
+function buildPanelControls() {
+  const wrap = document.getElementById('panels');
+  wrap.innerHTML = '';
+  for (let i = 0; i < 4; i++) {
+    const row = document.createElement('div');
+    row.className = 'panel-row';
+    row.innerHTML = `
+      <span class="panel-name">Panel ${i + 1}</span>
+      <label class="upload">Upload photo
+        <input type="file" accept="image/*" data-panel="${i}" hidden>
+      </label>
+      <button type="button" class="sample" data-panel="${i}" data-sample="0">Driver</button>
+      <button type="button" class="sample" data-panel="${i}" data-sample="1">Neon Queen</button>
+      <label class="zoom">Zoom
+        <input type="range" min="1" max="4" step="0.05" value="1.15" data-panel="${i}">
+      </label>
+      <button type="button" class="reset" data-panel="${i}">Reset</button>`;
+    wrap.appendChild(row);
+  }
+  wrap.querySelectorAll('input[type="file"]').forEach((input) => {
+    input.addEventListener('change', () => {
+      const file = input.files && input.files[0];
+      if (!file) return;
+      loadPhotoIntoPanel(Number(input.dataset.panel), URL.createObjectURL(file));
+    });
+  });
+  wrap.querySelectorAll('button.sample').forEach((button) => {
+    button.addEventListener('click', () => {
+      loadPhotoIntoPanel(Number(button.dataset.panel), SAMPLES[Number(button.dataset.sample)]);
+    });
+  });
+  wrap.querySelectorAll('input[type="range"]').forEach((slider) => {
+    slider.addEventListener('input', () => {
+      state.panels[Number(slider.dataset.panel)].zoom = Number(slider.value);
+      redraw();
+    });
+  });
+  wrap.querySelectorAll('button.reset').forEach((button) => {
+    button.addEventListener('click', () => {
+      const index = Number(button.dataset.panel);
+      const panel = state.panels[index];
+      panel.zoom = 1.15;
+      framePanelForPhoto(index);
+      redraw();
+    });
   });
 }
 
-function setSeg(id, attr, value) {
-  const seg = document.getElementById(id);
-  for (const btn of seg.querySelectorAll('button')) {
-    btn.classList.toggle('on', btn.dataset[attr] === value);
-  }
+// A row of toggle buttons: one active at a time, calling onPick.
+function bindPicker(id, values, onPick) {
+  const wrap = document.getElementById(id);
+  wrap.querySelectorAll('button').forEach((button) => {
+    button.addEventListener('click', () => {
+      wrap.querySelectorAll('button').forEach((b) => b.classList.remove('active'));
+      button.classList.add('active');
+      onPick(button.dataset.value);
+      redraw();
+    });
+  });
 }
 
-document.getElementById('titleInput').addEventListener('input', (e) => {
-  state.title = e.target.value.trim() || 'SOLARA';
-  render();
-});
+function bindTextInputs() {
+  const title = document.getElementById('title');
+  const subtitle = document.getElementById('subtitle');
+  const badge = document.getElementById('badge');
+  title.addEventListener('input', () => { state.title = title.value; redraw(); });
+  subtitle.addEventListener('input', () => { state.subtitle = subtitle.value; redraw(); });
+  badge.addEventListener('input', () => { state.badge = badge.value; redraw(); });
+  document.getElementById('stars').addEventListener('change', (event) => {
+    state.stars = Number(event.target.value);
+    redraw();
+  });
+}
 
-document.getElementById('taglineInput').addEventListener('input', (e) => {
-  state.tagline = e.target.value.trim() || 'A Solara City Story';
-  render();
-});
+// Export the cover at the chosen post size and download the PNG.
+function exportCover() {
+  const size = SIZES[state.size];
+  const canvas = renderCover(state, size.width, size.height);
+  canvas.toBlob((blob) => {
+    if (!blob) return;
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `solara-cover-${state.size}-${size.width}x${size.height}.png`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    statusLine.textContent = `Exported ${size.width} × ${size.height} PNG — check your downloads.`;
+  }, 'image/png');
+}
 
-document.getElementById('photoFile').addEventListener('change', async (e) => {
-  const file = e.target.files?.[0];
-  if (!file) return;
-  try {
-    state.photo = await loadImage(URL.createObjectURL(file));
-    render();
-  } catch {
-    alert('That photo could not be read. Try another file.');
-  }
-});
-
-for (const btn of document.querySelectorAll('[data-sample]')) {
-  btn.addEventListener('click', async () => {
-    try {
-      state.photo = await loadImage(btn.dataset.sample);
-      render();
-    } catch {
-      alert('That sample could not be loaded.');
+function init() {
+  bindPicker('layouts', LAYOUTS, (value) => { state.layout = value; });
+  bindPicker('grades', GRADES, (value) => { state.grade = value; });
+  bindPicker('sizes', SIZES, (value) => { state.size = value; });
+  bindTextInputs();
+  buildPanelControls();
+  bindCanvasGestures();
+  document.getElementById('export').addEventListener('click', exportCover);
+  // Ctrl/Cmd+E exports without reaching for the button.
+  document.addEventListener('keydown', (event) => {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'e') {
+      event.preventDefault();
+      exportCover();
     }
   });
+  loadSamples();
+  setupShotScene(state, redraw);
+  redraw();
 }
 
-document.getElementById('layoutSeg').addEventListener('click', (e) => {
-  const layout = e.target.dataset?.layout;
-  if (!layout) return;
-  state.layout = layout;
-  setSeg('layoutSeg', 'layout', layout);
-  render();
-});
-
-document.getElementById('gradeSeg').addEventListener('click', (e) => {
-  const grade = e.target.dataset?.grade;
-  if (!grade) return;
-  state.grade = grade;
-  setSeg('gradeSeg', 'grade', grade);
-  render();
-});
-
-document.getElementById('sizeSeg').addEventListener('click', (e) => {
-  const size = e.target.dataset?.size;
-  if (!size) return;
-  state.size = size;
-  setSeg('sizeSeg', 'size', size);
-  render();
-});
-
-// Export: draw the same cover at full size onto a fresh canvas and download
-// it. The exported PNG is the app's own drawing, byte for byte.
-exportBtn.addEventListener('click', () => {
-  if (!state.photo) {
-    alert('Load a photo first.');
-    return;
-  }
-  const [w, h] = currentDims();
-  const out = document.createElement('canvas');
-  drawCover(out, {
-    photo: state.photo,
-    title: state.title,
-    tagline: state.tagline,
-    layout: state.layout,
-    grade: state.grade,
-    width: w,
-    height: h,
-  });
-  out.toBlob((blob) => {
-    if (!blob) return;
-    downloadLink.href = URL.createObjectURL(blob);
-    downloadLink.download = `solara-cover-${state.size}.png`;
-    downloadLink.click();
-    setTimeout(() => URL.revokeObjectURL(downloadLink.href), 5000);
-  }, 'image/png');
-});
-
-// Boot: the first sample photo, then the URL staging (screenshots drive the
-// app through ?shot=cover|editor&photo=..&caption=..&grade=..&layout=..).
-loadImage('samples/portrait1.jpg')
-  .then((img) => {
-    state.photo = img;
-    return applyStaging(state, render, loadImage, canvas);
-  })
-  .then(() => {
-    // Staging drives state from the URL; bring the controls along so the
-    // buttons and inputs show what the cover actually uses, not the
-    // defaults the page shipped with.
-    setSeg('layoutSeg', 'layout', state.layout);
-    setSeg('gradeSeg', 'grade', state.grade);
-    setSeg('sizeSeg', 'size', state.size);
-    document.getElementById('titleInput').value = state.title;
-    document.getElementById('taglineInput').value = state.tagline;
-  })
-  .then(render)
-  .catch(() => render());
+init();
